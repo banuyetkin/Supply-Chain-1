@@ -1,24 +1,52 @@
-{
-  "name": "supplier-selection-optimiser",
-  "version": "1.0.0",
-  "description": "Generic supplier selection tool — minimise distance while meeting demand",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "next": "^14.2.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0"
-  },
-  "devDependencies": {
-    "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  }
-}
+import{useState,useRef,useEffect}from"react";import Head from"next/head";
+function hav(a,b,c,d){const R=6371,r=Math.PI/180,dL=(c-a)*r,dl=(d-b)*r,x=Math.sin(dL/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(dl/2)**2;return Math.round(R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)))}
+function parseCSV(t){const l=t.trim().split(/\r?\n/).filter(x=>x.trim()),hi=Math.max(l.findIndex(x=>x.toLowerCase().includes("supplier")),0),r=[];for(let i=hi+1;i<l.length;i++){const v=l[i].split(",").map(x=>x.trim().replace(/^"|"$/g,""));if(!v[0])continue;r.push({name:v[0],lat:parseFloat(v[1])||0,lng:parseFloat(v[2])||0,transport:parseFloat(v[3])||0,purchase:parseFloat(v[4])||0,capacity:parseFloat(v[5])||999999})}return r}
+const DEMO=[{name:"Apex Materials",lat:51.5074,lng:-0.1278,transport:2.5,purchase:12,capacity:5000},{name:"BuildCo",lat:48.8566,lng:2.3522,transport:4.1,purchase:9.8,capacity:3000},{name:"CraftSource",lat:52.3676,lng:4.9041,transport:1.8,purchase:14.5,capacity:8000},{name:"Delta Supply",lat:53.4808,lng:-2.2426,transport:1.2,purchase:16,capacity:2000},{name:"EliteParts",lat:50.1109,lng:8.6821,transport:5.5,purchase:8.5,capacity:10000},{name:"FabCorp",lat:45.4654,lng:9.1859,transport:6.8,purchase:7.2,capacity:6000}];
+const TCSV="Supplier Name,Latitude,Longitude,Transportation Cost/Product,Purchase Cost/Product,Capacity (Units)\r\nSupplier A,51.5074,-0.1278,2.50,12.00,5000\r\nSupplier B,48.8566,2.3522,4.10,9.80,3000\r\n";
+const QP=["Only suppliers within 300 km","Demand is now 15,000 units","Minimise cost instead","Why was furthest excluded?","What if closest is unavailable?"];
+export default function App(){
+const[step,setStep]=useState(1),[raw,setRaw]=useState([]),[lat,setLat]=useState("51.5074"),[lng,setLng]=useState("-0.1278"),[dem,setDem]=useState("10000"),[result,setResult]=useState(null),[live,setLive]=useState(null),[loading,setLoading]=useState(false),[err,setErr]=useState(""),[msgs,setMsgs]=useState([]),[inp,setInp]=useState(""),[cload,setCload]=useState(false);
+const fRef=useRef(null),cEnd=useRef(null),act=live||result;
+useEffect(()=>{cEnd.current?.scrollIntoView({behavior:"smooth"})},[msgs,cload]);
+const goTo=n=>{setStep(n);setErr("")};
+const dlT=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([TCSV],{type:"text/csv"}));a.download="Suppliers_Template.csv";a.click()};
+const loadF=f=>{const r=new FileReader();r.onload=e=>{const rows=parseCSV(e.target.result);if(!rows.length){setErr("No valid rows.");return}setRaw(rows);goTo(3)};r.readAsText(f)};
+const runOpt=async()=>{const la=parseFloat(lat),lo=parseFloat(lng),d=parseInt(dem);if(isNaN(la)||isNaN(lo)){setErr("Enter valid coordinates.");return}if(!d||d<1){setErr("Enter valid demand.");return}const en=raw.map(s=>({...s,distance_km:hav(la,lo,s.lat,s.lng),total_cost_per_unit:+(s.transport+s.purchase).toFixed(2)}));setLoading(true);setErr("");try{const res=await fetch("/api/optimise",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({suppliers:en,demand:d})});if(!res.ok)throw new Error(await res.text());const data=await res.json();setResult(data);setLive(null);setMsgs([{role:"assistant",content:`Analysed ${en.length} suppliers, selected optimal ${data.selected?.length} for ${d.toLocaleString()} units. Ask me anything!`}]);goTo(4)}catch(e){setErr("Failed: "+e.message)}finally{setLoading(false)}};
+const send=async text=>{if(!text?.trim()||cload)return;setInp("");const um={role:"user",content:text};setMsgs(m=>[...m,um]);setCload(true);try{const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[...msgs,um],result:act,demand:parseInt(dem)})});if(!res.ok)throw new Error(await res.text());const data=await res.json();setMsgs(m=>[...m,{role:"assistant",content:data.reply}]);if(data.updatedResult)setLive(data.updatedResult)}catch(e){setMsgs(m=>[...m,{role:"assistant",content:"Sorry, something went wrong."}])}finally{setCload(false)}};
+const S={p:"8px 18px",fs:13,fw:500,br:8,cu:"pointer",ff:"inherit"},Btn=({ch,onClick,primary,green,disabled})=><button onClick={onClick} disabled={disabled} style={{...S,border:primary||green?"none":"1px solid #ddd",background:primary?"#111":green?"#1D9E75":"transparent",color:primary||green?"#fff":"#333",opacity:disabled?.5:1,cursor:disabled?"not-allowed":"pointer"}}>{ch}</button>;
+const Card=({title,children})=><div style={{border:"1px solid #e5e5e5",borderRadius:10,padding:"1rem",marginBottom:14}}><div style={{fontSize:11,fontWeight:600,color:"#888",textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>{title}</div>{children}</div>;
+const TH=({ch})=><th style={{padding:"6px 8px",textAlign:"left",color:"#888",fontWeight:500,borderBottom:"1px solid #eee",whiteSpace:"nowrap"}}>{ch}</th>;
+const TD=({ch})=><td style={{padding:"6px 8px",borderBottom:"1px solid #f0f0f0"}}>{ch}</td>;
+return(<><Head><title>Supplier Optimiser</title></Head>
+<main style={{maxWidth:step===4?1100:800,margin:"0 auto",padding:"2rem 1rem",fontFamily:"system-ui,sans-serif"}}>
+<h1 style={{fontSize:22,fontWeight:600,marginBottom:4}}>Supplier Selection Optimiser</h1>
+<p style={{color:"#666",fontSize:13,marginBottom:20}}>Upload data → Optimise → Refine through chat</p>
+<div style={{display:"flex",alignItems:"center",marginBottom:24}}>{["Template","Upload","Demand","Results"].map((lb,i)=><div key={i} style={{display:"flex",alignItems:"center",flex:i<3?1:0}}><div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:step===i+1?"#000":step>i+1?"#0F6E56":"#aaa",fontWeight:step===i+1?600:400}}><span style={{width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,border:`1.5px solid ${step===i+1?"#000":step>i+1?"#0F6E56":"#ccc"}`,background:step===i+1?"#000":step>i+1?"#E1F5EE":"transparent",color:step===i+1?"#fff":"inherit"}}>{i+1}</span>{lb}</div>{i<3&&<div style={{flex:1,height:1,background:"#e5e5e5",margin:"0 8px"}}/>}</div>)}</div>
+{err&&<div style={{background:"#fff0f0",border:"1px solid #fcc",borderRadius:8,padding:"10px 14px",fontSize:13,color:"#c00",marginBottom:16}}>{err}</div>}
+{step===1&&<div><Card title="Data template"><p style={{fontSize:13,color:"#555",marginBottom:14}}>Download, fill in your suppliers, then upload.</p><table style={{fontSize:13,borderCollapse:"collapse",width:"100%"}}><thead><tr style={{background:"#f7f7f7"}}>{["Supplier Name","Latitude","Longitude","Transport ($)","Purchase ($)","Capacity"].map(h=><TH key={h} ch={h}/>)}</tr></thead><tbody><tr style={{color:"#aaa",fontStyle:"italic"}}>{["Supplier A","51.5074","-0.1278","2.50","12.00","5000"].map((v,i)=><TD key={i} ch={v}/>)}</tr></tbody></table></Card><div style={{display:"flex",gap:12}}><Btn ch="↓ Download CSV template" onClick={dlT} green/><Btn ch="I have my data →" onClick={()=>goTo(2)} primary/></div></div>}
+{step===2&&<div><div onClick={()=>fRef.current?.click()} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)loadF(f)}} style={{border:"1.5px dashed #ccc",borderRadius:12,padding:"3rem 2rem",textAlign:"center",cursor:"pointer",marginBottom:12}}><div style={{fontSize:32,marginBottom:10,opacity:.5}}>📄</div><p style={{fontWeight:600,marginBottom:6}}>Drop your filled CSV here</p><p style={{fontSize:13,color:"#888",marginBottom:16}}>Supplier Name, Lat, Lng, Transport, Purchase, Capacity</p><Btn ch="Browse file"/></div><input ref={fRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>{if(e.target.files[0])loadF(e.target.files[0])}}/><div style={{textAlign:"center",marginBottom:16}}><button onClick={()=>{setRaw(DEMO);goTo(3)}} style={{fontSize:13,color:"#888",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Try with demo data</button></div><Btn ch="← Back" onClick={()=>goTo(1)}/></div>}
+{step===3&&<div><Card title={`${raw.length} suppliers loaded`}><table style={{fontSize:13,borderCollapse:"collapse",width:"100%"}}><thead><tr style={{background:"#f7f7f7"}}>{["Supplier","Lat","Lng","Transport","Purchase","Capacity"].map(h=><TH key={h} ch={h}/>)}</tr></thead><tbody>{raw.slice(0,6).map((s,i)=><tr key={i}>{[s.name,s.lat,s.lng,"$"+s.transport,"$"+s.purchase,s.capacity].map((v,j)=><TD key={j} ch={v}/>)}</tr>)}</tbody></table></Card><Card title="Your location and demand"><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14}}>{[["Your latitude",lat,setLat],["Your longitude",lng,setLng],["Demand (units)",dem,setDem]].map(([lb,val,set])=><div key={lb} style={{display:"flex",flexDirection:"column",gap:5}}><label style={{fontSize:12,color:"#888",fontWeight:500}}>{lb}</label><input type="number" value={val} onChange={e=>set(e.target.value)} step="any" style={{padding:"7px 10px",fontSize:13,borderRadius:8,border:"1px solid #ddd",fontFamily:"inherit",width:"100%"}}/></div>)}</div></Card><div style={{display:"flex",gap:12}}><Btn ch={loading?"Optimising…":"Run optimisation"} onClick={runOpt} primary disabled={loading}/><Btn ch="← Back" onClick={()=>goTo(2)}/></div></div>}
+{step===4&&act&&<div style={{display:"grid",gridTemplateColumns:"1fr 340px",border:"1px solid #e5e5e5",borderRadius:12,overflow:"hidden",minHeight:640}}>
+<div style={{padding:"1.25rem",borderRight:"1px solid #e5e5e5",overflowY:"auto",maxHeight:700}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>{[{l:"Selected",v:act.selected?.length+" suppliers"},{l:"Demand covered",v:(act.demand_covered||0).toLocaleString()+" units",g:true},{l:"Avg distance",v:(act.total_distance_km||0).toLocaleString()+" km"},{l:"Cost/unit",v:"$"+(act.avg_cost_per_unit||0).toFixed(2)}].map(({l,v,g})=><div key={l} style={{background:"#f7f7f7",borderRadius:8,padding:"10px 12px"}}><div style={{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:".05em",marginBottom:3}}>{l}</div><div style={{fontSize:20,fontWeight:600,color:g?"#0F6E56":"inherit"}}>{v}</div></div>)}</div>
+<Card title="Supplier ranking"><table style={{fontSize:12,borderCollapse:"collapse",width:"100%"}}><thead><tr style={{background:"#f7f7f7"}}>{["Supplier","Dist","Cost/unit","Allocated","Status"].map(h=><TH key={h} ch={h}/>)}</tr></thead><tbody>{(act.all_ranked||[]).map((s,i)=>{const sel=act.selected?.find(x=>x.name===s.name);return<tr key={i} style={{background:sel?"#f0fff8":"transparent"}}><TD ch={<strong>{s.name}</strong>}/><TD ch={s.distance_km+"km"}/><TD ch={"$"+(s.transport+s.purchase).toFixed(2)}/><TD ch={sel?sel.allocated_units?.toLocaleString()+"u":"—"}/><TD ch={<span style={{background:sel?"#E1F5EE":"#f5f5f5",color:sel?"#0F6E56":"#888",fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20}}>{sel?"Selected":"—"}</span>}/></tr>})}</tbody></table></Card>
+<Card title="Strategy"><p style={{fontSize:13,color:"#555",lineHeight:1.6,marginBottom:10}}>{act.strategy}</p>{act.risks&&<div style={{background:"#FAEEDA",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#633806"}}>⚠️ <strong>Risks:</strong> {act.risks}</div>}</Card>
+<div style={{display:"flex",gap:10}}><Btn ch="Adjust demand" onClick={()=>goTo(3)} primary/><Btn ch="New data" onClick={()=>goTo(2)}/></div>
+</div>
+<div style={{display:"flex",flexDirection:"column",maxHeight:700,background:"#fafafa"}}>
+<div style={{padding:"12px 14px",borderBottom:"1px solid #e5e5e5",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:"50%",background:"#1D9E75",display:"inline-block"}}/>AI assistant</div>
+<div style={{flex:1,overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:10}}>
+{msgs.map((m,i)=><div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"90%",padding:"10px 12px",fontSize:13,lineHeight:1.5,background:m.role==="user"?"#111":"#fff",color:m.role==="user"?"#fff":"#333",border:m.role==="assistant"?"1px solid #e5e5e5":"none",borderRadius:m.role==="user"?"12px 12px 2px 12px":"2px 12px 12px 12px"}}>{m.role==="assistant"&&<div style={{fontSize:10,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:".05em",marginBottom:4}}>Assistant</div>}{m.content}</div>)}
+{cload&&<div style={{alignSelf:"flex-start",background:"#fff",border:"1px solid #e5e5e5",borderRadius:"2px 12px 12px 12px",padding:"10px 12px"}}><div style={{fontSize:10,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:".05em",marginBottom:6}}>Assistant</div><div style={{display:"flex",gap:4}}>{[0,.2,.4].map(d=><span key={d} style={{width:6,height:6,borderRadius:"50%",background:"#aaa",animation:`pulse .9s ${d}s infinite`}}/>)}</div></div>}
+<div ref={cEnd}/>
+</div>
+<div style={{padding:"8px 12px",borderTop:"1px solid #e5e5e5",display:"flex",flexWrap:"wrap",gap:6}}>{QP.map(p=><button key={p} onClick={()=>send(p)} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:"1px solid #ddd",cursor:"pointer",background:"#fff",color:"#555",fontFamily:"inherit"}}>{p}</button>)}</div>
+<div style={{display:"flex",gap:8,padding:"12px",borderTop:"1px solid #e5e5e5"}}>
+<input value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")send(inp)}} placeholder="Ask anything…" style={{flex:1,padding:"8px 12px",fontSize:13,borderRadius:20,border:"1px solid #ddd",fontFamily:"inherit",background:"#fff"}}/>
+<button onClick={()=>send(inp)} disabled={cload||!inp.trim()} style={{width:32,height:32,borderRadius:"50%",background:"#111",color:"#fff",border:"none",cursor:"pointer",fontSize:14,opacity:cload||!inp.trim()?.4:1}}>↑</button>
+</div>
+</div>
+</div>}
+</main>
+<style>{`@keyframes pulse{0%,60%,100%{opacity:.2;transform:scale(.8)}30%{opacity:1;transform:scale(1)}}`}</style>
+</>)}
